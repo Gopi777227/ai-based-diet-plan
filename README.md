@@ -1,2 +1,10 @@
-# ai-based-diet-plan
-NutriAI is a full-stack AI-Based Personalized Indian Diet Plan web application developed for a B.Tech capstone project. It calculates BMI, BMR, and daily calorie needs, predicts diet type using machine learning, generates 7-day Indian meal plans, tracks user progress with charts, stores history in a database, and provides a modern dashboard
+## My new app
+
+This app was created using https://getmocha.com.
+Need help or want to join the community? Join our [Discord](https://discord.gg/shDEGBSe2d).
+
+To run the devserver:
+```
+npm install
+npm run dev
+```
