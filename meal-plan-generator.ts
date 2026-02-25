@@ -1,6 +1,6 @@
 // Meal plan generation algorithm
 
-import { indianMeals, getMealsByTypeWithFallback, type Meal } from "./indian-meals";
+import { getMealsByTypeWithFallback, type Meal } from "./indian-meals";
 
 export interface DayPlan {
   day: number;
@@ -56,18 +56,6 @@ function selectMealsWithVariety(
   return shuffled.slice(0, count);
 }
 
-// Adjust portions to match calorie targets
-function adjustMealCalories(meal: Meal, targetCalories: number): Meal {
-  const ratio = targetCalories / meal.calories;
-  return {
-    ...meal,
-    calories: Math.round(meal.calories * ratio),
-    protein: Math.round(meal.protein * ratio),
-    carbs: Math.round(meal.carbs * ratio),
-    fats: Math.round(meal.fats * ratio),
-  };
-}
-
 // Calculate target calories per meal type
 function calculateMealTargets(dailyCalories: number): {
   breakfast: number;
@@ -90,7 +78,7 @@ export function generateMealPlan(
   dietType: string,
   isVegetarian: boolean
 ): WeeklyMealPlan {
-  const mealTargets = calculateMealTargets(dailyCalories);
+  calculateMealTargets(dailyCalories);
   const days: DayPlan[] = [];
   
   // Track recently used meals for variety

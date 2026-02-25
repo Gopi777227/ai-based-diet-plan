@@ -1,19 +1,203 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@getmocha/users-service/react";
-import { Button } from "@/react-app/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/react-app/components/ui/card";
-import { Apple, Salad, Target, TrendingUp, Scale, Loader2 } from "lucide-react";
+import { Button } from "@/button";
+import WebAuthnDemo from "@/src/WebAuthnDemo";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/card";
+import { Input } from "@/input";
+import { Label } from "@/label";
+import { Apple, Salad, Target, TrendingUp, Scale, Loader2, LogIn, Mail, X } from "lucide-react";
+
+const DEMO_USER = {
+  id: "demo-user",
+  email: "demo@nutriplan.local",
+  google_user_data: {
+    given_name: "Demo",
+    name: "Demo User",
+    picture: "https://api.dicebear.com/7.x/avataaars/svg?seed=demo-user",
+  },
+};
+
+const GOOGLE_USER = {
+  id: `google-${Date.now()}`,
+  email: "user@gmail.com",
+  google_user_data: {
+    given_name: "User",
+    name: "Google User",
+    picture: "https://api.dicebear.com/7.x/avataaars/svg?seed=google-user",
+  },
+};
 
 export default function HomePage() {
   const navigate = useNavigate();
   const { user, isPending, redirectToLogin } = useAuth();
+  const [hasDemoUser, setHasDemoUser] = useState(false);
+  
+  // Sign In State
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInPassword, setSignInPassword] = useState("");
+  const [signInLoading, setSignInLoading] = useState(false);
+  const [signInError, setSignInError] = useState("");
+  
+  // Sign Up State
+  const [showSignUp, setShowSignUp] = useState(false);
+  const [signUpEmail, setSignUpEmail] = useState("");
+  const [signUpPassword, setSignUpPassword] = useState("");
+  const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
+  const [signUpLoading, setSignUpLoading] = useState(false);
+  const [signUpError, setSignUpError] = useState("");
+
+  useEffect(() => {
+    const storedDemo = localStorage.getItem("demo-user");
+    if (storedDemo) {
+      setHasDemoUser(true);
+      navigate("/dashboard");
+    }
+    
+    const storedCurrentUser = localStorage.getItem("current-user");
+    if (storedCurrentUser && !storedDemo) {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if (!isPending && user) {
       navigate("/dashboard");
     }
   }, [user, isPending, navigate]);
+
+  const handleDemoLogin = () => {
+    localStorage.setItem("demo-user", JSON.stringify(DEMO_USER));
+    localStorage.setItem("current-user", DEMO_USER.id);
+    setHasDemoUser(true);
+    navigate("/dashboard");
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signInEmail.trim() || !signInPassword.trim()) {
+      setSignInError("Please enter both email and password");
+      return;
+    }
+
+    if (!signInEmail.includes("@")) {
+      setSignInError("Please enter a valid email");
+      return;
+    }
+
+    setSignInError("");
+    setSignInLoading(true);
+    try {
+      // Simulate authentication delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const userId = `user-${btoa(signInEmail).replace(/=/g, "")}`;
+      const storedAccount = localStorage.getItem(`account-${userId}`);
+      
+      if (!storedAccount) {
+        setSignInError("Account not found. Please sign up first.");
+        setSignInLoading(false);
+        return;
+      }
+
+      const account = JSON.parse(storedAccount);
+      
+      if (account.password !== signInPassword) {
+        setSignInError("Incorrect password");
+        setSignInLoading(false);
+        return;
+      }
+      
+      // Set as current user
+      localStorage.setItem("current-user", userId);
+      
+      setSignInEmail("");
+      setSignInPassword("");
+      setShowSignIn(false);
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Sign in error:", err);
+      setSignInError("Sign in failed. Please try again.");
+    } finally {
+      setSignInLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!signUpEmail.trim() || !signUpPassword.trim() || !signUpConfirmPassword.trim()) {
+      setSignUpError("Please fill in all fields");
+      return;
+    }
+
+    if (!signUpEmail.includes("@")) {
+      setSignUpError("Please enter a valid email");
+      return;
+    }
+
+    if (signUpPassword.length < 6) {
+      setSignUpError("Password must be at least 6 characters");
+      return;
+    }
+
+    if (signUpPassword !== signUpConfirmPassword) {
+      setSignUpError("Passwords do not match");
+      return;
+    }
+
+    setSignUpError("");
+    setSignUpLoading(true);
+    try {
+      // Simulate authentication delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const givenName = signUpEmail.split("@")[0];
+      const userId = `user-${btoa(signUpEmail).replace(/=/g, "")}`;
+      
+      // Check if account already exists
+      const existingAccount = localStorage.getItem(`account-${userId}`);
+      if (existingAccount) {
+        setSignUpError("Email already registered. Please sign in instead.");
+        setSignUpLoading(false);
+        return;
+      }
+      
+      const newAccount = {
+        id: userId,
+        email: signUpEmail,
+        password: signUpPassword,
+        google_user_data: {
+          given_name: givenName.charAt(0).toUpperCase() + givenName.slice(1),
+          name: givenName.charAt(0).toUpperCase() + givenName.slice(1),
+          picture: `https://api.dicebear.com/7.x/avataaars/svg?seed=${signUpEmail}`,
+        },
+        createdAt: new Date().toISOString(),
+      };
+      
+      // Store user account
+      localStorage.setItem(`account-${userId}`, JSON.stringify(newAccount));
+      // Set as current user
+      localStorage.setItem("current-user", userId);
+      
+      setSignUpEmail("");
+      setSignUpPassword("");
+      setSignUpConfirmPassword("");
+      setShowSignUp(false);
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Sign up error:", err);
+      setSignUpError("Sign up failed. Please try again.");
+    } finally {
+      setSignUpLoading(false);
+    }
+  };
+
+  const handleGetStarted = () => {
+    setShowSignUp(true);
+    setSignUpError("");
+  };
 
   if (isPending) {
     return (
@@ -36,12 +220,32 @@ export default function HomePage() {
               NutriPlan India
             </span>
           </div>
-          <Button 
-            onClick={redirectToLogin}
-            className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
-          >
-            Sign In with Google
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              onClick={handleDemoLogin}
+              variant="outline"
+              className="border-orange-200 text-orange-600 hover:bg-orange-50"
+            >
+              <LogIn className="w-4 h-4 mr-2" />
+              Try Demo
+            </Button>
+            <Button 
+              onClick={() => setShowSignIn(true)}
+              variant="outline"
+              className="border-orange-200 text-orange-600 hover:bg-orange-50"
+            >
+              Sign In
+            </Button>
+            <Button 
+              onClick={() => setShowSignUp(true)}
+              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
+            >
+              Sign Up
+            </Button>
+          </div>
+          <div className="mt-4">
+            <WebAuthnDemo />
+          </div>
         </div>
       </header>
 
@@ -67,7 +271,7 @@ export default function HomePage() {
               </p>
               <Button 
                 size="lg" 
-                onClick={redirectToLogin}
+                onClick={handleGetStarted}
                 className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-lg px-8 py-6 shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-all"
               >
                 Get Started Free
@@ -195,6 +399,250 @@ export default function HomePage() {
           <p>© 2025 NutriPlan India. Built for B.Tech Capstone Project.</p>
         </div>
       </footer>
+
+      {/* Sign In Dialog */}
+      {showSignIn && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                    <Mail className="w-6 h-6 text-white" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Sign In</h2>
+                </div>
+                <button
+                  onClick={() => setShowSignIn(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSignIn} className="space-y-4">
+                {signInError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {signInError}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="signin-email" className="text-gray-700 font-medium">
+                    Email Address
+                  </Label>
+                  <Input
+                    id="signin-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={signInEmail}
+                    onChange={(e) => setSignInEmail(e.target.value)}
+                    required
+                    disabled={signInLoading}
+                    className="border-2 border-gray-200 focus:border-orange-500"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signin-password" className="text-gray-700 font-medium">
+                    Password
+                  </Label>
+                  <Input
+                    id="signin-password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={signInPassword}
+                    onChange={(e) => setSignInPassword(e.target.value)}
+                    required
+                    disabled={signInLoading}
+                    className="border-2 border-gray-200 focus:border-orange-500"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={!signInEmail.trim() || !signInPassword.trim() || signInLoading}
+                  className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-2"
+                >
+                  {signInLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Signing In...
+                    </>
+                  ) : (
+                    "Sign In"
+                  )}
+                </Button>
+
+                <div className="text-center text-sm text-gray-600">
+                  Don't have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSignIn(false);
+                      setShowSignUp(true);
+                      setSignInEmail("");
+                      setSignInPassword("");
+                      setSignInError("");
+                    }}
+                    className="text-orange-600 hover:text-orange-700 font-semibold"
+                  >
+                    Sign Up
+                  </button>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowSignIn(false);
+                    setSignInEmail("");
+                    setSignInPassword("");
+                    setSignInError("");
+                  }}
+                  disabled={signInLoading}
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sign Up Dialog */}
+      {showSignUp && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center">
+                    <Mail className="w-6 h-6 text-white" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Create Account</h2>
+                </div>
+                <button
+                  onClick={() => setShowSignUp(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSignUp} className="space-y-4">
+                {signUpError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {signUpError}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email" className="text-gray-700 font-medium">
+                    Email Address
+                  </Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={signUpEmail}
+                    onChange={(e) => setSignUpEmail(e.target.value)}
+                    required
+                    disabled={signUpLoading}
+                    className="border-2 border-gray-200 focus:border-green-500"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password" className="text-gray-700 font-medium">
+                    Password
+                  </Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="At least 6 characters"
+                    value={signUpPassword}
+                    onChange={(e) => setSignUpPassword(e.target.value)}
+                    required
+                    disabled={signUpLoading}
+                    className="border-2 border-gray-200 focus:border-green-500"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-confirm" className="text-gray-700 font-medium">
+                    Confirm Password
+                  </Label>
+                  <Input
+                    id="signup-confirm"
+                    type="password"
+                    placeholder="Confirm your password"
+                    value={signUpConfirmPassword}
+                    onChange={(e) => setSignUpConfirmPassword(e.target.value)}
+                    required
+                    disabled={signUpLoading}
+                    className="border-2 border-gray-200 focus:border-green-500"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={!signUpEmail.trim() || !signUpPassword.trim() || !signUpConfirmPassword.trim() || signUpLoading}
+                  className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2"
+                >
+                  {signUpLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating Account...
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
+                </Button>
+
+                <div className="text-center text-sm text-gray-600">
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSignUp(false);
+                      setShowSignIn(true);
+                      setSignUpEmail("");
+                      setSignUpPassword("");
+                      setSignUpConfirmPassword("");
+                      setSignUpError("");
+                    }}
+                    className="text-green-600 hover:text-green-700 font-semibold"
+                  >
+                    Sign In
+                  </button>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowSignUp(false);
+                    setSignUpEmail("");
+                    setSignUpPassword("");
+                    setSignUpConfirmPassword("");
+                    setSignUpError("");
+                  }}
+                  disabled={signUpLoading}
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

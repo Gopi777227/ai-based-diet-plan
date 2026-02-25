@@ -3,7 +3,8 @@ export default {
   darkMode: ["class"],
   content: [
     "./index.html",
-    "./src/react-app/**/*.{js,ts,jsx,tsx}",
+    "./*.{jsx,tsx}",
+    "./{Home,App,Dashboard,CreatePlan,MealPlan,AuthCallback}.tsx",
   ],
   theme: {
     extend: {

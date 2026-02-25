@@ -1,8 +1,8 @@
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
-import { cn } from "@/react-app/lib/utils"
-import { Button } from "@/react-app/components/ui/button"
+import { cn } from "@/utils"
+import { Button } from "@/button"
 import { X } from "lucide-react"
 
 function Dialog({

@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "019c8bd1-0415-71a3-87a4-afbab65696db",
-  "main": "./src/worker/index.ts",
+  "main": "./index.ts",
   "compatibility_date": "2025-06-17",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {

@@ -44,6 +44,7 @@
     "cf-typegen": "wrangler types",
     "check": "tsc && vite build && wrangler deploy --dry-run",
     "dev": "vite",
+     "webauthn-server": "node server/index.js",
     "knip": "knip",
     "lint": "eslint ."
   }

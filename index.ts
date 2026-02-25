@@ -7,43 +7,59 @@ import {
   deleteSession,
   MOCHA_SESSION_TOKEN_COOKIE_NAME,
 } from "@getmocha/users-service/backend";
-import { calculateNutritionMetrics, type HealthProfileInput } from "../shared/nutrition";
-import { generateMealPlan } from "../shared/meal-plan-generator";
+import { calculateNutritionMetrics, type HealthProfileInput } from "./nutrition";
+import { generateMealPlan } from "./meal-plan-generator";
 
 const app = new Hono<{ Bindings: Env }>();
 
 // Get OAuth redirect URL for Google login
 app.get("/api/oauth/google/redirect_url", async (c) => {
-  const redirectUrl = await getOAuthRedirectUrl("google", {
-    apiUrl: c.env.MOCHA_USERS_SERVICE_API_URL,
-    apiKey: c.env.MOCHA_USERS_SERVICE_API_KEY,
-  });
-
-  return c.json({ redirectUrl }, 200);
+  try {
+    if (!c.env.MOCHA_USERS_SERVICE_API_URL || !c.env.MOCHA_USERS_SERVICE_API_KEY) {
+      return c.json({ error: "OAuth service not configured" }, 500);
+    }
+    const redirectUrl = await getOAuthRedirectUrl("google", {
+      apiUrl: c.env.MOCHA_USERS_SERVICE_API_URL,
+      apiKey: c.env.MOCHA_USERS_SERVICE_API_KEY,
+    });
+    return c.json({ redirectUrl }, 200);
+  } catch (error) {
+    console.error("OAuth redirect error:", error);
+    return c.json({ error: "Failed to get OAuth redirect URL" }, 500);
+  }
 });
 
 // Exchange OAuth code for session token
 app.post("/api/sessions", async (c) => {
-  const body = await c.req.json();
+  try {
+    const body = await c.req.json();
 
-  if (!body.code) {
-    return c.json({ error: "No authorization code provided" }, 400);
+    if (!body.code) {
+      return c.json({ error: "No authorization code provided" }, 400);
+    }
+
+    if (!c.env.MOCHA_USERS_SERVICE_API_URL || !c.env.MOCHA_USERS_SERVICE_API_KEY) {
+      return c.json({ error: "OAuth service not configured" }, 500);
+    }
+
+    const sessionToken = await exchangeCodeForSessionToken(body.code, {
+      apiUrl: c.env.MOCHA_USERS_SERVICE_API_URL,
+      apiKey: c.env.MOCHA_USERS_SERVICE_API_KEY,
+    });
+
+    setCookie(c, MOCHA_SESSION_TOKEN_COOKIE_NAME, sessionToken, {
+      httpOnly: true,
+      path: "/",
+      sameSite: "none",
+      secure: true,
+      maxAge: 60 * 24 * 60 * 60, // 60 days
+    });
+
+    return c.json({ success: true }, 200);
+  } catch (error) {
+    console.error("Session creation error:", error);
+    return c.json({ error: "Failed to create session" }, 500);
   }
-
-  const sessionToken = await exchangeCodeForSessionToken(body.code, {
-    apiUrl: c.env.MOCHA_USERS_SERVICE_API_URL,
-    apiKey: c.env.MOCHA_USERS_SERVICE_API_KEY,
-  });
-
-  setCookie(c, MOCHA_SESSION_TOKEN_COOKIE_NAME, sessionToken, {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none",
-    secure: true,
-    maxAge: 60 * 24 * 60 * 60, // 60 days
-  });
-
-  return c.json({ success: true }, 200);
 });
 
 // Get current authenticated user

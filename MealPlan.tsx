@@ -1,88 +1,56 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
-import { Button } from "@/react-app/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/react-app/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/react-app/components/ui/tabs";
-import { Badge } from "@/react-app/components/ui/badge";
+import { Button } from "@/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs";
+import { Badge } from "@/badge";
 import { 
   Salad, ArrowLeft, Loader2, RefreshCw, Coffee, Sun, Moon, Cookie,
-  Flame, Drumstick, Wheat, Droplets, Calendar, ChefHat, Leaf
+  Flame, Drumstick, Wheat, Droplets, Calendar, Leaf, Trash2, Download, ChefHat
 } from "lucide-react";
-import type { WeeklyMealPlan, DayPlan } from "@/shared/meal-plan-generator";
-import type { Meal } from "@/shared/indian-meals";
-
-interface MealPlanData {
-  id: number;
-  profile: {
-    daily_calories: number;
-    diet_type: string;
-    dietary_preference: string;
-    protein_grams: number;
-    carbs_grams: number;
-    fats_grams: number;
-  };
-  plan: WeeklyMealPlan;
-}
+import { getMealPlan, deleteMealPlan } from "@/meal-plan-storage";
+import type { MealPlanRecord } from "@/meal-plan-storage";
+import type { Meal } from "@/indian-meals";
 
 export default function MealPlanPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { user, isPending: authPending } = useAuth();
   
-  const [data, setData] = useState<MealPlanData | null>(null);
+  const [data, setData] = useState<MealPlanRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeDay, setActiveDay] = useState("1");
 
   useEffect(() => {
-    if (!authPending && !user) {
-      navigate("/");
+    if (id) {
+      try {
+        const mealPlanId = parseInt(id);
+        const plan = getMealPlan(mealPlanId);
+        if (plan) {
+          setData(plan);
+        } else {
+          setError("Meal plan not found");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [user, authPending, navigate]);
+  }, [id]);
 
+  // Add body-level diet background while viewing a meal plan
   useEffect(() => {
-    if (user && id) {
-      fetchMealPlan();
-    }
-  }, [user, id]);
+    document.body.classList.add('diet-bg');
+    return () => document.body.classList.remove('diet-bg');
+  }, []);
 
-  const fetchMealPlan = async () => {
-    try {
-      const response = await fetch(`/api/health-profiles/${id}/meal-plan`);
-      if (!response.ok) throw new Error("Failed to fetch meal plan");
-      const result = await response.json();
-      setData(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegenerate = async () => {
-    setRegenerating(true);
-    try {
-      const response = await fetch(`/api/health-profiles/${id}/meal-plan/regenerate`, {
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("Failed to regenerate");
-      const result = await response.json();
-      setData(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
-  if (authPending || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-green-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-orange-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Preparing your meal plan...</p>
+          <p className="text-gray-600">Loading your meal plan...</p>
         </div>
       </div>
     );
@@ -101,11 +69,30 @@ export default function MealPlanPage() {
     );
   }
 
-  const { profile, plan } = data;
-  const currentDay = plan.days[parseInt(activeDay) - 1];
+  const handleDelete = () => {
+    if (confirm("Are you sure you want to delete this meal plan?")) {
+      if (id) {
+        deleteMealPlan(parseInt(id));
+      }
+      navigate("/dashboard");
+    }
+  };
+
+  const handleDownload = () => {
+    const text = JSON.stringify(data, null, 2);
+    const element = document.createElement("a");
+    element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(text));
+    element.setAttribute("download", `meal-plan-${data.id}.json`);
+    element.style.display = "none";
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  const { profile, metrics, mealPlan } = data;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-green-50">
+    <div className="min-h-screen diet-bg">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -123,15 +110,18 @@ export default function MealPlanPage() {
           <div className="flex items-center gap-3">
             <Button 
               variant="outline" 
-              onClick={handleRegenerate}
-              disabled={regenerating}
+              onClick={handleDownload}
             >
-              {regenerating ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4 mr-2" />
-              )}
-              New Plan
+              <Download className="w-4 h-4 mr-2" />
+              Download
+            </Button>
+            <Button 
+              variant="outline" 
+              className="border-red-200 text-red-600 hover:bg-red-50"
+              onClick={handleDelete}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
             </Button>
             <Button variant="ghost" onClick={() => navigate("/dashboard")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -159,28 +149,28 @@ export default function MealPlanPage() {
             <Card className="border-0 shadow-md bg-gradient-to-br from-orange-50 to-orange-100">
               <CardContent className="pt-4 pb-4 text-center">
                 <Flame className="w-6 h-6 text-orange-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-orange-600">{profile.daily_calories}</p>
+                <p className="text-2xl font-bold text-orange-600">{metrics.dailyCalories}</p>
                 <p className="text-xs text-gray-600">Daily Calories</p>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
               <CardContent className="pt-4 pb-4 text-center">
                 <Drumstick className="w-6 h-6 text-blue-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-blue-600">{profile.protein_grams}g</p>
+                <p className="text-2xl font-bold text-blue-600">{metrics.proteinGrams}g</p>
                 <p className="text-xs text-gray-600">Protein</p>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-md bg-gradient-to-br from-amber-50 to-amber-100">
               <CardContent className="pt-4 pb-4 text-center">
                 <Wheat className="w-6 h-6 text-amber-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-amber-600">{profile.carbs_grams}g</p>
+                <p className="text-2xl font-bold text-amber-600">{metrics.carbsGrams}g</p>
                 <p className="text-xs text-gray-600">Carbs</p>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-md bg-gradient-to-br from-green-50 to-green-100">
               <CardContent className="pt-4 pb-4 text-center">
                 <Droplets className="w-6 h-6 text-green-500 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-green-600">{profile.fats_grams}g</p>
+                <p className="text-2xl font-bold text-green-600">{metrics.fatsGrams}g</p>
                 <p className="text-xs text-gray-600">Fats</p>
               </CardContent>
             </Card>
@@ -188,10 +178,10 @@ export default function MealPlanPage() {
 
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary" className="bg-purple-100 text-purple-700">
-              {profile.diet_type}
+              {metrics.dietType}
             </Badge>
             <Badge variant="secondary" className="bg-green-100 text-green-700">
-              {profile.dietary_preference === "vegetarian" ? (
+              {profile.dietaryPreference === "vegetarian" ? (
                 <><Leaf className="w-3 h-3 mr-1" /> Vegetarian</>
               ) : (
                 "Non-Vegetarian"
@@ -203,7 +193,7 @@ export default function MealPlanPage() {
         {/* Day Tabs */}
         <Tabs value={activeDay} onValueChange={setActiveDay} className="space-y-6">
           <TabsList className="grid grid-cols-7 h-auto p-1 bg-white shadow-md">
-            {plan.days.map((day) => (
+            {mealPlan.days.map((day) => (
               <TabsTrigger
                 key={day.day}
                 value={day.day.toString()}
@@ -215,7 +205,7 @@ export default function MealPlanPage() {
             ))}
           </TabsList>
 
-          {plan.days.map((day) => (
+          {mealPlan.days.map((day) => (
             <TabsContent key={day.day} value={day.day.toString()} className="space-y-6">
               {/* Day Summary */}
               <Card className="border-0 shadow-lg bg-white/80">

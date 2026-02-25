@@ -1,18 +1,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@getmocha/users-service/react";
-import { Button } from "@/react-app/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/react-app/components/ui/card";
-import { Input } from "@/react-app/components/ui/input";
-import { Label } from "@/react-app/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/react-app/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/react-app/components/ui/radio-group";
-import { Progress } from "@/react-app/components/ui/progress";
+import { Button } from "@/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/card";
+import { Input } from "@/input";
+import { Label } from "@/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/select";
+import { RadioGroup, RadioGroupItem } from "@/radio-group";
+import { Progress } from "@/progress";
 import { 
   Salad, Heart, Scale, Activity, Utensils, ArrowLeft, Loader2, 
   Calculator, Flame, Target, Zap, ArrowRight
 } from "lucide-react";
-import type { NutritionCalculations } from "@/shared/nutrition";
+import { generateMealPlanRecord, saveMealPlan } from "@/meal-plan-storage";
+import { initializeProgress, incrementPlanCount, getUserProgress } from "@/progress-tracker";
+import type { HealthProfileInput } from "@/nutrition";
+import type { MealPlanRecord } from "@/meal-plan-storage";
 
 interface HealthFormData {
   age: string;
@@ -25,13 +28,22 @@ interface HealthFormData {
   healthCondition: "diabetes" | "thyroid" | "none" | "";
 }
 
-interface ProfileResult extends NutritionCalculations {
-  id: number;
+interface ProfileResult extends MealPlanRecord {}
+
+interface DemoUser {
+  id: string;
+  email: string;
+  google_user_data?: {
+    given_name: string;
+    name: string;
+    picture: string;
+  };
 }
 
 export default function CreatePlanPage() {
   const navigate = useNavigate();
   const { user, isPending } = useAuth();
+  const [loading, setLoading] = useState(true);
 
   const [formData, setFormData] = useState<HealthFormData>({
     age: "",
@@ -48,10 +60,17 @@ export default function CreatePlanPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isPending && !user) {
-      navigate("/");
+    const currentUserId = localStorage.getItem("current-user");
+    
+    if (!currentUserId) {
+      if (!isPending) {
+        navigate("/");
+      }
+      return;
     }
-  }, [user, isPending, navigate]);
+
+    setLoading(false);
+  }, [isPending, navigate]);
 
   const handleInputChange = (field: keyof HealthFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -71,27 +90,42 @@ export default function CreatePlanPage() {
     setError(null);
 
     try {
-      const response = await fetch("/api/health-profiles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          age: parseInt(formData.age),
-          gender: formData.gender,
-          height: parseFloat(formData.height),
-          weight: parseFloat(formData.weight),
-          activityLevel: formData.activityLevel,
-          goal: formData.goal,
-          dietaryPreference: formData.dietaryPreference,
-          healthCondition: formData.healthCondition,
-        }),
-      });
+      // Simulate API delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      if (!response.ok) {
-        throw new Error("Failed to create health profile");
+      const profile: HealthProfileInput = {
+        age: parseInt(formData.age),
+        gender: formData.gender as "male" | "female",
+        height: parseFloat(formData.height),
+        weight: parseFloat(formData.weight),
+        activityLevel: formData.activityLevel as "light" | "moderate" | "heavy",
+        goal: formData.goal as "weight_loss" | "weight_gain" | "maintain",
+        dietaryPreference: formData.dietaryPreference as "vegetarian" | "non_vegetarian",
+        healthCondition: formData.healthCondition as "diabetes" | "thyroid" | "none",
+      };
+
+      // Generate meal plan record (uses current-user internally)
+      const record = generateMealPlanRecord(profile);
+      
+      // Save to localStorage
+      saveMealPlan(record);
+
+      // Initialize or update progress tracking
+      const existingProgress = getUserProgress();
+      if (!existingProgress) {
+        const targetWeight = profile.goal === "weight_loss" 
+          ? profile.weight * 0.9 
+          : profile.goal === "weight_gain" 
+          ? profile.weight * 1.1 
+          : profile.weight;
+        
+        initializeProgress(undefined, profile.weight, targetWeight);
       }
+      
+      // Increment plan count
+      incrementPlanCount();
 
-      const data = await response.json();
-      setResult(data);
+      setResult(record);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -99,7 +133,7 @@ export default function CreatePlanPage() {
     }
   };
 
-  if (isPending) {
+  if (isPending || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-green-50 flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
@@ -107,7 +141,8 @@ export default function CreatePlanPage() {
     );
   }
 
-  if (!user) {
+  const currentUserId = localStorage.getItem("current-user");
+  if (!currentUserId) {
     return null;
   }
 
@@ -354,7 +389,7 @@ export default function CreatePlanPage() {
   );
 }
 
-// Results view component
+// Results view component (included for completeness)
 function ResultsView({ 
   result, 
   formData, 
@@ -385,10 +420,10 @@ function ResultsView({
     }
   };
 
-  const totalMacros = result.proteinGrams + result.carbsGrams + result.fatsGrams;
-  const proteinPercent = Math.round((result.proteinGrams / totalMacros) * 100);
-  const carbsPercent = Math.round((result.carbsGrams / totalMacros) * 100);
-  const fatsPercent = Math.round((result.fatsGrams / totalMacros) * 100);
+  const totalMacros = result.metrics.proteinGrams + result.metrics.carbsGrams + result.metrics.fatsGrams;
+  const proteinPercent = Math.round((result.metrics.proteinGrams / totalMacros) * 100);
+  const carbsPercent = Math.round((result.metrics.carbsGrams / totalMacros) * 100);
+  const fatsPercent = Math.round((result.metrics.fatsGrams / totalMacros) * 100);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-green-50">
@@ -433,9 +468,9 @@ function ResultsView({
             </CardHeader>
             <CardContent>
               <div className="flex items-end gap-3 mb-4">
-                <span className="text-5xl font-bold text-gray-900">{result.bmi}</span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium mb-2 ${getBMIColor(result.bmiCategory)}`}>
-                  {result.bmiCategory}
+                <span className="text-5xl font-bold text-gray-900">{result.metrics.bmi}</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium mb-2 ${getBMIColor(result.metrics.bmiCategory)}`}>
+                  {result.metrics.bmiCategory}
                 </span>
               </div>
               <div className="space-y-2">
@@ -448,7 +483,7 @@ function ResultsView({
                 <div className="h-2 rounded-full bg-gradient-to-r from-blue-400 via-green-400 via-yellow-400 to-red-400 relative">
                   <div 
                     className="absolute w-3 h-3 bg-white border-2 border-gray-800 rounded-full -top-0.5 transform -translate-x-1/2"
-                    style={{ left: `${Math.min(Math.max((result.bmi - 15) / 25 * 100, 0), 100)}%` }}
+                    style={{ left: `${Math.min(Math.max((result.metrics.bmi - 15) / 25 * 100, 0), 100)}%` }}
                   />
                 </div>
               </div>
@@ -466,7 +501,7 @@ function ResultsView({
             </CardHeader>
             <CardContent>
               <div className="flex items-end gap-2">
-                <span className="text-5xl font-bold text-gray-900">{result.bmr.toLocaleString()}</span>
+                <span className="text-5xl font-bold text-gray-900">{result.metrics.bmr.toLocaleString()}</span>
                 <span className="text-gray-500 mb-2">kcal/day</span>
               </div>
             </CardContent>
@@ -487,7 +522,7 @@ function ResultsView({
             </CardHeader>
             <CardContent>
               <div className="flex items-end gap-2">
-                <span className="text-5xl font-bold text-gray-900">{result.dailyCalories.toLocaleString()}</span>
+                <span className="text-5xl font-bold text-gray-900">{result.metrics.dailyCalories.toLocaleString()}</span>
                 <span className="text-gray-500 mb-2">kcal/day</span>
               </div>
             </CardContent>
@@ -502,8 +537,8 @@ function ResultsView({
               <CardDescription>Based on your goals and health conditions</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className={`inline-flex px-4 py-2 rounded-xl bg-gradient-to-r ${getDietTypeColor(result.dietType)} text-white font-bold text-2xl`}>
-                {result.dietType}
+              <div className={`inline-flex px-4 py-2 rounded-xl bg-gradient-to-r ${getDietTypeColor(result.metrics.dietType)} text-white font-bold text-2xl`}>
+                {result.metrics.dietType}
               </div>
             </CardContent>
           </Card>
@@ -525,8 +560,8 @@ function ResultsView({
                 </div>
                 <Progress value={proteinPercent} className="h-3 bg-blue-100" />
                 <div className="text-center">
-                  <span className="text-3xl font-bold text-blue-600">{result.proteinGrams}g</span>
-                  <p className="text-xs text-gray-500 mt-1">{(result.proteinGrams * 4).toLocaleString()} kcal</p>
+                  <span className="text-3xl font-bold text-blue-600">{result.metrics.proteinGrams}g</span>
+                  <p className="text-xs text-gray-500 mt-1">{(result.metrics.proteinGrams * 4).toLocaleString()} kcal</p>
                 </div>
               </div>
 
@@ -538,8 +573,8 @@ function ResultsView({
                 </div>
                 <Progress value={carbsPercent} className="h-3 bg-orange-100" />
                 <div className="text-center">
-                  <span className="text-3xl font-bold text-orange-600">{result.carbsGrams}g</span>
-                  <p className="text-xs text-gray-500 mt-1">{(result.carbsGrams * 4).toLocaleString()} kcal</p>
+                  <span className="text-3xl font-bold text-orange-600">{result.metrics.carbsGrams}g</span>
+                  <p className="text-xs text-gray-500 mt-1">{(result.metrics.carbsGrams * 4).toLocaleString()} kcal</p>
                 </div>
               </div>
 
@@ -551,8 +586,8 @@ function ResultsView({
                 </div>
                 <Progress value={fatsPercent} className="h-3 bg-green-100" />
                 <div className="text-center">
-                  <span className="text-3xl font-bold text-green-600">{result.fatsGrams}g</span>
-                  <p className="text-xs text-gray-500 mt-1">{(result.fatsGrams * 9).toLocaleString()} kcal</p>
+                  <span className="text-3xl font-bold text-green-600">{result.metrics.fatsGrams}g</span>
+                  <p className="text-xs text-gray-500 mt-1">{(result.metrics.fatsGrams * 9).toLocaleString()} kcal</p>
                 </div>
               </div>
             </div>
