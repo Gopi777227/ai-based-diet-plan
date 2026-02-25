@@ -24,6 +24,11 @@ export function Chatbot() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
+  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<string | null>(
+    typeof window !== "undefined" ? localStorage.getItem("lally-voice") : null
+  );
 
   const userId = localStorage.getItem("current-user") || "default";
 
@@ -64,7 +69,68 @@ export function Chatbot() {
     // Initialize speech synthesis
     if ("speechSynthesis" in window) {
       synthRef.current = window.speechSynthesis;
+      const pickPreferredVoice = () => {
+        if (!synthRef.current) return;
+        const voices = synthRef.current.getVoices();
+        if (!voices || voices.length === 0) return;
+        setAvailableVoices(voices);
+
+        // If user selected a voice previously, prefer it
+        if (selectedVoice) {
+          const sv = voices.find((v) => v.name === selectedVoice || v.voiceURI === selectedVoice);
+          if (sv) {
+            voiceRef.current = sv;
+            return;
+          }
+        }
+
+        const preferredNames = [
+          "Female",
+          "Samantha",
+          "Google UK English Female",
+          "Google US English",
+          "Zira",
+          "Amy",
+          "Emma",
+          "Joanna",
+          "Ivy",
+          "Kendra",
+          "Nicole",
+          "Olivia"
+        ];
+
+        // Try to find a matching preferred voice by name
+        for (const name of preferredNames) {
+          const v = voices.find((x) => x.name.includes(name));
+          if (v) {
+            voiceRef.current = v;
+            return;
+          }
+        }
+
+        // Fallback: prefer any English voice
+        const en = voices.find((x) => x.lang && x.lang.toLowerCase().startsWith("en"));
+        voiceRef.current = en || voices[0];
+      };
+
+      // Populate initially and when available voices change
+      pickPreferredVoice();
+      try {
+        window.speechSynthesis.onvoiceschanged = pickPreferredVoice;
+      } catch (e) {
+        // ignore if not supported
+      }
     }
+
+    // load voices initially (some browsers require a small delay)
+    const loadVoicesOnce = () => {
+      if (!synthRef.current) return;
+      const vs = synthRef.current.getVoices();
+      if (vs && vs.length > 0) {
+        setAvailableVoices(vs);
+      }
+    };
+    setTimeout(loadVoicesOnce, 200);
 
     return () => {
       if (recognitionRef.current) {
@@ -156,6 +222,9 @@ export function Chatbot() {
     synthRef.current.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
+    if (voiceRef.current) {
+      utterance.voice = voiceRef.current;
+    }
     utterance.rate = 0.9;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -201,7 +270,36 @@ export function Chatbot() {
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-[425px] h-[600px] flex flex-col">
           <DialogHeader>
-            <DialogTitle>🥗 Lally - Your Nutrition Bot</DialogTitle>
+            <div className="flex items-center justify-between w-full">
+              <DialogTitle>🥗 Lally - Your Nutrition Bot</DialogTitle>
+              <div className="ml-3">
+                <label className="text-xs text-gray-500 mr-2">Voice</label>
+                <select
+                  className="text-sm px-2 py-1 border rounded"
+                  value={selectedVoice ?? ""}
+                  onChange={(e) => {
+                    const name = e.target.value || null;
+                    setSelectedVoice(name);
+                    try {
+                      if (name) localStorage.setItem("lally-voice", name);
+                      else localStorage.removeItem("lally-voice");
+                    } catch (err) {}
+
+                    if (synthRef.current) {
+                      const v = synthRef.current.getVoices().find((x) => x.name === name || x.voiceURI === name);
+                      if (v) voiceRef.current = v;
+                    }
+                  }}
+                >
+                  <option value="">Auto</option>
+                  {availableVoices.map((v) => (
+                    <option key={v.voiceURI || v.name} value={v.name}>
+                      {v.name} {v.lang ? `(${v.lang})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-4 bg-gray-50 rounded-lg space-y-4">

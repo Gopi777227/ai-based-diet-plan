@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@getmocha/users-service/react";
 import { Button } from "@/button";
-import WebAuthnDemo from "@/src/WebAuthnDemo";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/card";
 import { Input } from "@/input";
 import { Label } from "@/label";
@@ -208,7 +207,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-green-50">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-emerald-50">
       {/* Hero Section */}
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -244,7 +243,6 @@ export default function HomePage() {
             </Button>
           </div>
           <div className="mt-4">
-            <WebAuthnDemo />
           </div>
         </div>
       </header>
